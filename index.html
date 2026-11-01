@@ -1142,8 +1142,9 @@ section{ margin-bottom:16px; }
 .cp-t{
   font-family:'IBM Plex Mono',monospace;
   font-size:8px;
-  line-height:1.2;
+  line-height:1.25;
   color:var(--muted);
+  white-space:normal;
 }
 .cp-name{
   font-size:9.5px;
@@ -1240,6 +1241,64 @@ select.cp-sel option{ color:#222; background:#fff; }
 @media(max-width:600px){
   .day-cell{ height:auto; min-height:160px; }
 }
+
+/* ===== 學員管理與點名 ===== */
+.tabs{ display:flex; gap:6px; margin:0 0 12px; }
+.tabs button{
+  flex:1; -webkit-appearance:none; appearance:none;
+  border:1px solid var(--line); background:transparent; color:var(--muted);
+  font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+  padding:8px 0; border-radius:999px; cursor:pointer;
+}
+.tabs button.on{ background:var(--dawn-dim); border-color:var(--dawn-dim); color:var(--dawn); }
+
+.cp-att{ margin-top:2px; font-family:'IBM Plex Mono',monospace; font-size:8.5px; line-height:1.2; opacity:.85; }
+
+.att{ margin-top:12px; padding-top:10px; border-top:1px dashed var(--line); }
+.att-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; font-size:13px; font-weight:700; color:#2b3445; }
+.att-count{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11.5px; color:var(--muted); }
+.att-row{ display:flex; align-items:center; gap:10px; padding:9px 4px; border-radius:8px; cursor:pointer; font-size:14px; }
+.att-row:active{ background:rgba(92,103,125,0.1); }
+.att-row input{ width:20px; height:20px; flex:0 0 auto; }
+.att-row .an{ flex:1; min-width:0; font-weight:600; color:#2b3445; }
+.att-row .ar{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); white-space:nowrap; }
+.ar.low{ color:#8a5d06; font-weight:700; }
+.ar.warn{ color:#c0504d; font-weight:700; }
+.att-empty{ font-size:12px; color:var(--muted); padding:2px 0; }
+
+.stu-add{ display:flex; gap:6px; margin-bottom:8px; }
+.stu-add input{ flex:1 1 0; min-width:0; }
+.stu-add select{ flex:1 1 0; min-width:0; font-family:'Inter',sans-serif; }
+.stu-sum{ font-size:11.5px; color:var(--muted); margin:0 0 12px 2px; }
+.stu-group{ margin-bottom:14px; }
+.sg-head{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; color:var(--muted); margin:0 0 6px 2px; }
+.stu-row{
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:10px; background:var(--ink-soft);
+  border:1px solid var(--line); margin-bottom:6px; cursor:pointer;
+}
+.stu-row:active{ transform:scale(0.99); }
+.stu-row b{ font-size:14.5px; color:#2b3445; }
+.stu-row small{ display:block; font-size:11px; color:var(--muted); margin-top:2px; }
+.rem-chip{
+  font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px;
+  padding:4px 10px; border-radius:999px; white-space:nowrap;
+  background:var(--dawn-dim); color:var(--dawn);
+}
+.rem-chip.low{ background:rgba(245,183,69,0.4); color:#8a5d06; }
+.rem-chip.warn{ background:#d06a68; color:#fff; }
+.rem-chip.none{ background:rgba(92,103,125,0.2); color:var(--muted); }
+
+.buy-head, .buy-row{ display:grid; grid-template-columns:1.4fr 1fr 1fr 30px; gap:6px; align-items:center; }
+.buy-head{ font-size:10.5px; color:var(--muted); margin-bottom:4px; }
+.buy-row{ padding:6px 0 8px; border-bottom:1px solid var(--line); }
+.buy-row input{ padding:8px 6px; font-size:13px; }
+.buy-row .btn{ padding:6px 0; }
+.buy-prog{ grid-column:1 / -1; font-size:11px; color:var(--muted); }
+.stu-info{
+  background:var(--ink); border:1px solid var(--line); border-radius:10px;
+  padding:10px 12px; font-size:12.5px; line-height:1.7; margin:12px 0 14px; color:#2b3445;
+}
 </style>
 </head>
 
@@ -1256,6 +1315,12 @@ select.cp-sel option{ color:#222; background:#fff; }
     <span class="readonly-tag" id="readonlyTag" style="display:none;">唯讀檢視</span>
   </div>
 
+  <div class="tabs" id="tabs">
+    <button type="button" class="on" data-view="cal">課務月曆</button>
+    <button type="button" data-view="stu">學員管理</button>
+  </div>
+
+  <div id="viewCal">
   <section class="sec-stats">
     <div class="section-label" id="statsLabel">值班時數統計</div>
     <div class="stats-card" id="statsCard"></div>
@@ -1282,6 +1347,20 @@ select.cp-sel option{ color:#222; background:#fff; }
     <div class="need-head" id="needHead"></div>
     <div id="needList"></div>
   </section>
+  </div>
+
+  <div id="viewStu" style="display:none;">
+    <section>
+      <div class="section-label">學員管理</div>
+      <div class="stu-add">
+        <input type="text" id="stuAddName" placeholder="學員姓名" style="font-family:'Inter',sans-serif;">
+        <select id="stuAddCls"></select>
+        <button class="btn btn-primary" id="stuAddBtn" style="flex:0 0 auto;">新增</button>
+      </div>
+      <div class="stu-sum" id="stuSummary"></div>
+      <div id="stuList"></div>
+    </section>
+  </div>
 
 </div>
 
@@ -1340,6 +1419,40 @@ select.cp-sel option{ color:#222; background:#fff; }
   </div>
 </div>
 
+<!-- 學員資料 -->
+<div class="overlay" id="stuOverlay">
+  <div class="modal">
+    <div class="modal-wrap">
+      <button class="btn btn-ghost modal-close" id="closeStuBtn">✕</button>
+      <h2>學員資料</h2>
+      <div class="sub">變更會自動儲存；每一期課程為 8 堂</div>
+
+      <div class="field">
+        <label>學員姓名</label>
+        <input type="text" id="stuName" style="font-family:'Inter',sans-serif;">
+      </div>
+      <div class="field">
+        <label>所屬班級（來自「管理」內的班級時段）</label>
+        <select id="stuCls" style="font-family:'Inter',sans-serif;"></select>
+      </div>
+
+      <div class="field">
+        <label>課程購買紀錄（每購買一期＝8 堂）</label>
+        <div class="buy-head"><span>購買日期</span><span>學費</span><span>器材費</span><span></span></div>
+        <div id="buyList"></div>
+        <button type="button" class="btn" id="buyAddBtn" style="margin-top:8px;">＋ 新增一期</button>
+      </div>
+
+      <div class="stu-info" id="stuInfo"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="stuDelBtn">刪除學員</button>
+        <button class="btn btn-primary" id="stuDoneBtn">完成</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const CACHE_KEY = 'xuqu-schedule-cache';
 const SYNC_FLAG = 'xuqu-synced';
@@ -1375,7 +1488,7 @@ const DEFAULT_SLOTS = [
 let state = {
   slots: DEFAULT_SLOTS.map(s=>({...s})),
   staff: [{id:'p1', name:'晏存', c:0}],
-  marks:{}, notes:{}, extras:{}
+  marks:{}, notes:{}, extras:{}, students:[], att:{}
 };
 
 const todayObj = new Date();
@@ -1431,6 +1544,82 @@ function setRec(ds, id, patch){
   }
 }
 
+/* ---------- 學員、點名、剩餘堂數 ---------- */
+const SESSIONS_PER_TERM = 8;
+const money = n => Math.round(n || 0).toLocaleString('en-US');
+
+function classNames(){
+  const out = [];
+  const add = n => { n = (n || '').trim(); if(n && !out.includes(n)) out.push(n); };
+  state.slots.forEach(s => add(s.name));
+  Object.keys(state.extras).forEach(ds => (state.extras[ds] || []).forEach(x => add(x.name)));
+  return out;
+}
+function classOptions(cur){
+  const names = classNames();
+  let html = `<option value="">未分班</option>` +
+    names.map(n => `<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
+  if(cur && !names.includes(cur)) html += `<option value="${esc(cur)}" selected>${esc(cur)}（班級已不存在）</option>`;
+  return html;
+}
+const studentById = id => state.students.find(x => x.id === id) || null;
+function studentsOf(s){
+  const n = (s.name || '').trim();
+  return n ? state.students.filter(st => st.cls === n) : [];
+}
+function isPresent(ds, id, stId){
+  const a = state.att[ds] && state.att[ds][id];
+  return !!(a && a.includes(stId));
+}
+function setPresent(ds, id, stId, on){
+  const day = (state.att[ds] = state.att[ds] || {});
+  let a = (day[id] || []).filter(x => x !== stId);
+  if(on) a.push(stId);
+  if(a.length) day[id] = a; else delete day[id];
+  if(!Object.keys(day).length) delete state.att[ds];
+}
+function dropAttFor(match){      // 刪除班級時段／單次班／學員時，清掉對應點名
+  Object.keys(state.att).forEach(ds=>{
+    Object.keys(state.att[ds]).forEach(id=>{
+      const keep = match(ds, id, state.att[ds][id]);
+      if(keep !== undefined){
+        if(keep.length) state.att[ds][id] = keep; else delete state.att[ds][id];
+      }
+    });
+    if(!Object.keys(state.att[ds]).length) delete state.att[ds];
+  });
+}
+function attendedList(stId){
+  const out = [];
+  Object.keys(state.att).sort().forEach(ds=>{
+    const day = state.att[ds];
+    const slots = slotsFor(ds);
+    Object.keys(day).sort().forEach(id=>{
+      if(!day[id].includes(stId)) return;
+      if(!slots.some(s => s.id === id)) return;
+      if(getRec(ds, id).off) return;      // 停課不計
+      out.push({ds, id});
+    });
+  });
+  return out;
+}
+function studentStats(st){
+  const buys = st.buys || [];
+  const dated = buys.filter(b => b.date).map(b => b.date).sort();
+  const first = buys.length ? (dated[0] || '0000-00-00') : '';
+  const total = buys.length * SESSIONS_PER_TERM;
+  const att = first ? attendedList(st.id).filter(x => x.ds >= first) : [];
+  let tuition = 0, gear = 0;
+  buys.forEach(b => { tuition += +b.tuition || 0; gear += +b.gear || 0; });
+  return {periods: buys.length, total, used: att.length, remaining: total - att.length, att, tuition, gear};
+}
+function attInfo(ds, s){
+  if(READONLY) return null;
+  const list = studentsOf(s);
+  if(!list.length) return null;
+  return {total: list.length, present: list.filter(st => isPresent(ds, s.id, st.id)).length};
+}
+
 /* ---------- Toast / 同步狀態 ---------- */
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -1476,6 +1665,8 @@ function applyData(d){
   if(d.notes && typeof d.notes === 'object') state.notes = d.notes;
   if(d.extras && typeof d.extras === 'object') state.extras = d.extras;
   if(d.marks && typeof d.marks === 'object') state.marks = migrateMarks(d.marks);
+  if(Array.isArray(d.students)) state.students = d.students;
+  if(d.att && typeof d.att === 'object') state.att = d.att;
 }
 function snapshotState(){ return JSON.parse(JSON.stringify(state)); }
 function writeCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(state)); }catch(e){} }
@@ -1511,6 +1702,8 @@ async function loadData(){
         Object.keys(local.marks || {}).forEach(k=>{ if(!state.marks[k]) state.marks[k] = local.marks[k]; });
         Object.keys(local.notes || {}).forEach(k=>{ if(!state.notes[k]) state.notes[k] = local.notes[k]; });
         Object.keys(local.extras || {}).forEach(k=>{ if(!state.extras[k]) state.extras[k] = local.extras[k]; });
+        if(!(state.students || []).length && (local.students || []).length) state.students = local.students;
+        Object.keys(local.att || {}).forEach(k=>{ if(!state.att[k]) state.att[k] = local.att[k]; });
         (local.slots || []).forEach(s=>{ if(!state.slots.some(x=> x.id === s.id)) state.slots.push(s); });
         await pushDb();
       }else{
@@ -1658,10 +1851,11 @@ function renderMonth(){
         who = `<select class="cp-sel" data-ds="${ds}" data-id="${s.id}"${sty}>${staffOptions(rec.p)}</select>`;
       }
       return `<div class="cp ${rec.off?'off':''} ${s.extra?'xt':''}" data-ds="${ds}" data-id="${s.id}">
-        <div class="cp-t">${s.start}</div>
+        <div class="cp-t">${s.start.replace(':','')}-${s.end.replace(':','')}</div>
         <div class="cp-name">${esc(slotName(s))}</div>
         ${who}
         ${rec.n ? `<div class="cp-note">${esc(rec.n)}</div>` : ''}
+        ${(()=>{ const a = attInfo(ds, s); return (a && !rec.off && (a.present || ds <= todayStr)) ? `<div class="cp-att">到課 ${a.present}/${a.total}</div>` : ''; })()}
       </div>`;
     }).join('');
     html += `
@@ -1737,6 +1931,7 @@ function renderAll(){
   renderMonth();
   renderStats();
   renderNeed();
+  renderStudents();
 }
 
 /* =========================================================
@@ -1783,6 +1978,36 @@ const dayBody = document.getElementById('dayModalBody');
 let editingDate = null;
 let lastX = {start:'18:00', end:'20:00'};
 
+function attHtml(ds, s){
+  const rec = getRec(ds, s.id);
+  if(rec.off) return `<div class="att-head">點名</div><div class="att-empty">本日停課，不需點名</div>`;
+  if(!(s.name || '').trim()) return `<div class="att-head">點名</div><div class="att-empty">請先到「管理」為這個時段命名班級</div>`;
+  const list = studentsOf(s);
+  if(!list.length) return `<div class="att-head">點名</div><div class="att-empty">「${esc(slotName(s))}」還沒有學員，請到學員管理新增</div>`;
+  const present = list.filter(st => isPresent(ds, s.id, st.id)).length;
+  const rows = list.map(st=>{
+    const stt = studentStats(st);
+    const on = isPresent(ds, s.id, st.id);
+    let right;
+    if(!stt.periods){
+      right = `<span class="ar warn">未購課</span>`;
+    }else{
+      const idx = stt.att.findIndex(x => x.ds === ds && x.id === s.id);
+      const no = (on && idx >= 0) ? `第${idx % SESSIONS_PER_TERM + 1}堂・` : '';
+      const cls = stt.remaining <= 0 ? 'warn' : (stt.remaining <= 2 ? 'low' : '');
+      right = `<span class="ar ${cls}">${no}剩 ${stt.remaining} 堂</span>`;
+    }
+    return `<label class="att-row"><input type="checkbox" data-att="${st.id}" ${on?'checked':''}><span class="an">${esc(st.name)}</span>${right}</label>`;
+  }).join('');
+  return `<div class="att-head">點名<span class="att-count">到課 ${present} / ${list.length}</span></div>${rows}`;
+}
+function refreshAtt(){
+  slotsFor(editingDate).forEach(s=>{
+    const el = dayBody.querySelector(`.att[data-id="${s.id}"]`);
+    if(el) el.innerHTML = attHtml(editingDate, s);
+  });
+}
+
 function renderDayModal(focusId){
   const ds = editingDate;
   const [y,m,d] = ds.split('-').map(Number);
@@ -1803,6 +2028,7 @@ function renderDayModal(focusId){
       </div>
       <label class="checkbox-row"><input type="checkbox" data-f="off" ${r.off?'checked':''}>本日停課（不計時數）</label>
       <textarea data-f="n" maxlength="120" placeholder="課程說明（例：本期第 3 堂）">${esc(r.n || '')}</textarea>
+      <div class="att" data-id="${s.id}">${attHtml(ds, s)}</div>
     </div>`;
   }).join('');
 
@@ -1839,6 +2065,13 @@ dayBody.addEventListener('change', e=>{
   const t = e.target;
   if(t.id === 'xStart' && t.value) lastX.start = t.value;
   if(t.id === 'xEnd' && t.value) lastX.end = t.value;
+  if(t.dataset.att !== undefined){
+    const abox = t.closest('.dm-slot');
+    if(!abox) return;
+    setPresent(editingDate, abox.dataset.id, t.dataset.att, t.checked);
+    persist(); renderAll(); refreshAtt();
+    return;
+  }
   const f = t.dataset.f;
   const box = t.closest('.dm-slot');
   if(!f || !box) return;
@@ -1846,6 +2079,7 @@ dayBody.addEventListener('change', e=>{
   if(f === 'off') setRec(editingDate, box.dataset.id, {off: t.checked ? 1 : 0});
   persist();
   renderAll();
+  refreshAtt();
 });
 dayBody.addEventListener('input', e=>{
   const t = e.target;
@@ -1868,6 +2102,7 @@ dayBody.addEventListener('click', e=>{
     state.extras[editingDate] = (state.extras[editingDate] || []).filter(x=> x.id !== id);
     if(!state.extras[editingDate].length) delete state.extras[editingDate];
     if(state.marks[editingDate]) setRec(editingDate, id, {p:'', n:'', off:0});
+    dropAttFor((ds, sid) => (ds === editingDate && sid === id) ? [] : undefined);
     persist(); renderAll(); renderDayModal();
     return;
   }
@@ -1936,7 +2171,13 @@ document.getElementById('slotList').addEventListener('change', e=>{
   const s = state.slots.find(x=> x.id === row.dataset.id);
   if(!s) return;
   if(f === 'wd') s.wd = Number(e.target.value);
-  else if(f === 'name') s.name = e.target.value.trim();
+  else if(f === 'name'){
+    const old = (s.name || '').trim();
+    s.name = e.target.value.trim();
+    if(old && old !== s.name && !classNames().includes(old)){      // 班級改名：學員的所屬班級跟著改
+      state.students.forEach(st=>{ if(st.cls === old) st.cls = s.name; });
+    }
+  }
   else if(f === 'from') s.from = e.target.value ? e.target.value + '-01' : '';
   else if(e.target.value) s[f] = e.target.value;
   persist();
@@ -1949,6 +2190,7 @@ document.getElementById('slotList').addEventListener('click', e=>{
   if(!confirm('刪除這個班級時段？已填寫的值班與課程說明也會一併移除。')) return;
   state.slots = state.slots.filter(s=> s.id !== id);
   Object.keys(state.marks).forEach(ds=> setRec(ds, id, {p:'', n:'', off:0}));
+  dropAttFor((ds, sid) => sid === id ? [] : undefined);
   persist();
   renderSlotList();
   renderAll();
@@ -2034,12 +2276,188 @@ document.getElementById('staffInput').addEventListener('keydown', e=>{
 });
 
 /* =========================================================
+   頁面切換、學員管理
+   ========================================================= */
+function setView(v){
+  if(READONLY) v = 'cal';
+  document.getElementById('viewCal').style.display = v === 'cal' ? '' : 'none';
+  document.getElementById('viewStu').style.display = v === 'stu' ? '' : 'none';
+  document.querySelectorAll('#tabs button').forEach(b=> b.classList.toggle('on', b.dataset.view === v));
+  window.scrollTo(0, 0);
+}
+document.getElementById('tabs').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-view]');
+  if(b) setView(b.dataset.view);
+});
+
+function remChip(stt){
+  if(!stt.periods) return `<span class="rem-chip none">未購課</span>`;
+  const cls = stt.remaining <= 0 ? 'warn' : (stt.remaining <= 2 ? 'low' : '');
+  return `<span class="rem-chip ${cls}">剩 ${stt.remaining} 堂</span>`;
+}
+
+function renderStudents(){
+  if(READONLY) return;
+  const addSel = document.getElementById('stuAddCls');
+  const cur = addSel.value;
+  addSel.innerHTML = classOptions(cur);
+
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+  let tu = 0, gear = 0;
+  state.students.forEach(st => (st.buys || []).forEach(b=>{
+    if((b.date || '').startsWith(ym)){ tu += +b.tuition || 0; gear += +b.gear || 0; }
+  }));
+  document.getElementById('stuSummary').textContent =
+    `共 ${state.students.length} 位學員・本月收款 學費 $${money(tu)}／器材費 $${money(gear)}`;
+
+  const names = classNames();
+  const groups = names.map(n => ({n, list: state.students.filter(s => s.cls === n)}));
+  const other = state.students.filter(s => !names.includes(s.cls));
+  if(other.length) groups.push({n:'未分班', list: other});
+
+  const html = groups.filter(g => g.list.length).map(g=>`
+    <div class="stu-group">
+      <div class="sg-head">${esc(g.n)}・${g.list.length} 人</div>
+      ${g.list.map(st=>{
+        const stt = studentStats(st);
+        const meta = stt.periods ? `已購 ${stt.periods} 期・已上 ${stt.used} 堂` : '尚未購買課程';
+        return `<div class="stu-row" data-sid="${st.id}">
+          <div><b>${esc(st.name)}</b><small>${meta}</small></div>
+          ${remChip(stt)}
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+  document.getElementById('stuList').innerHTML = html ||
+    `<div class="empty-state">還沒有學員，請在上方輸入姓名並選擇班級</div>`;
+}
+
+function addStudent(){
+  const nameEl = document.getElementById('stuAddName');
+  const name = nameEl.value.trim();
+  if(!name){ showToast('請輸入學員姓名'); return; }
+  const st = {
+    id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,4),
+    name,
+    cls: document.getElementById('stuAddCls').value,
+    buys: []
+  };
+  state.students.push(st);
+  nameEl.value = '';
+  persist();
+  renderAll();
+  openStudentModal(st.id);
+}
+document.getElementById('stuAddBtn').addEventListener('click', addStudent);
+document.getElementById('stuAddName').addEventListener('keydown', e=>{
+  if(e.key === 'Enter'){ e.preventDefault(); addStudent(); }
+});
+document.getElementById('stuList').addEventListener('click', e=>{
+  const row = e.target.closest('.stu-row[data-sid]');
+  if(row) openStudentModal(row.dataset.sid);
+});
+
+/* ---------- 學員資料視窗 ---------- */
+const stuOverlay = document.getElementById('stuOverlay');
+let editingStu = null;
+
+function renderStuModal(){
+  const st = studentById(editingStu);
+  if(!st){ stuOverlay.classList.remove('show'); return; }
+  document.getElementById('stuName').value = st.name;
+  document.getElementById('stuCls').innerHTML = classOptions(st.cls);
+
+  const stt = studentStats(st);
+  const order = (st.buys || []).slice().sort((a,b)=> (a.date || '').localeCompare(b.date || '')).map(b => b.id);
+  document.getElementById('buyList').innerHTML = (st.buys || []).map(b=>{
+    const k = order.indexOf(b.id);
+    const u = Math.max(0, Math.min(SESSIONS_PER_TERM, stt.used - k * SESSIONS_PER_TERM));
+    return `<div class="buy-row" data-bid="${b.id}">
+      <input type="date" data-bf="date" value="${esc(b.date || '')}">
+      <input type="number" inputmode="numeric" min="0" step="1" data-bf="tuition" placeholder="學費" value="${b.tuition === '' || b.tuition == null ? '' : esc(b.tuition)}">
+      <input type="number" inputmode="numeric" min="0" step="1" data-bf="gear" placeholder="器材費" value="${b.gear === '' || b.gear == null ? '' : esc(b.gear)}">
+      <button type="button" class="btn btn-ghost btn-danger" data-bdel="${b.id}">✕</button>
+      <div class="buy-prog">第 ${k+1} 期　已上 ${u} / ${SESSIONS_PER_TERM} 堂</div>
+    </div>`;
+  }).join('') || `<div class="att-empty">還沒有購買紀錄，請按「新增一期」</div>`;
+
+  document.getElementById('stuInfo').innerHTML = stt.periods
+    ? `已購 <b>${stt.periods}</b> 期（共 ${stt.total} 堂）・已上 <b>${stt.used}</b> 堂・<b>剩 ${stt.remaining} 堂</b><br>
+       累計繳費 <b>$${money(stt.tuition + stt.gear)}</b>（學費 $${money(stt.tuition)}／器材費 $${money(stt.gear)}）`
+    : `尚未購買課程，新增一期後即可開始計算剩餘堂數`;
+}
+function openStudentModal(id){
+  editingStu = id;
+  renderStuModal();
+  stuOverlay.classList.add('show');
+}
+function closeStu(){ stuOverlay.classList.remove('show'); renderAll(); }
+document.getElementById('closeStuBtn').addEventListener('click', closeStu);
+document.getElementById('stuDoneBtn').addEventListener('click', closeStu);
+stuOverlay.addEventListener('click', e=>{ if(e.target === stuOverlay) closeStu(); });
+
+document.getElementById('stuName').addEventListener('change', e=>{
+  const st = studentById(editingStu); if(!st) return;
+  const v = e.target.value.trim();
+  if(!v){ e.target.value = st.name; return; }
+  st.name = v; persist(); renderAll();
+});
+document.getElementById('stuCls').addEventListener('change', e=>{
+  const st = studentById(editingStu); if(!st) return;
+  st.cls = e.target.value; persist(); renderAll();
+});
+document.getElementById('buyAddBtn').addEventListener('click', ()=>{
+  const st = studentById(editingStu); if(!st) return;
+  st.buys = st.buys || [];
+  const last = st.buys[st.buys.length - 1];
+  st.buys.push({
+    id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2,4),
+    date: todayStr,
+    tuition: last ? last.tuition : '',
+    gear: ''
+  });
+  persist(); renderStuModal(); renderAll();
+});
+document.getElementById('buyList').addEventListener('change', e=>{
+  const st = studentById(editingStu);
+  const row = e.target.closest('.buy-row');
+  const f = e.target.dataset.bf;
+  if(!st || !row || !f) return;
+  const b = (st.buys || []).find(x => x.id === row.dataset.bid);
+  if(!b) return;
+  if(f === 'date') b.date = e.target.value;
+  else{
+    const v = parseFloat(e.target.value);
+    b[f] = isNaN(v) ? '' : v;
+  }
+  persist(); renderStuModal(); renderAll();
+});
+document.getElementById('buyList').addEventListener('click', e=>{
+  const del = e.target.closest('[data-bdel]');
+  const st = studentById(editingStu);
+  if(!del || !st) return;
+  if(!confirm('刪除這一期的購買紀錄？')) return;
+  st.buys = (st.buys || []).filter(b => b.id !== del.dataset.bdel);
+  persist(); renderStuModal(); renderAll();
+});
+document.getElementById('stuDelBtn').addEventListener('click', ()=>{
+  const st = studentById(editingStu); if(!st) return;
+  if(!confirm(`刪除學員「${st.name}」？購買紀錄與點名紀錄也會一併移除。`)) return;
+  state.students = state.students.filter(x => x.id !== st.id);
+  dropAttFor((ds, sid, arr) => arr.includes(st.id) ? arr.filter(x => x !== st.id) : undefined);
+  persist();
+  stuOverlay.classList.remove('show');
+  renderAll();
+});
+
+/* =========================================================
    初始化
    ========================================================= */
 (async function init(){
   if(READONLY){
     document.getElementById('openManageBtn').style.display = 'none';
     document.getElementById('readonlyTag').style.display = 'inline-block';
+    document.getElementById('tabs').style.display = 'none';
   }
   readCache();
   renderAll();
