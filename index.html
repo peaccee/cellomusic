@@ -1299,6 +1299,17 @@ select.cp-sel option{ color:#222; background:#fff; }
   background:var(--ink); border:1px solid var(--line); border-radius:10px;
   padding:10px 12px; font-size:12.5px; line-height:1.7; margin:12px 0 14px; color:#2b3445;
 }
+
+/* 多班級 */
+.cls-box{ display:flex; flex-wrap:wrap; gap:6px; }
+.cls-chip{
+  display:inline-flex; align-items:center; padding:7px 13px; border-radius:999px;
+  border:1px solid var(--line); background:var(--ink); color:#2b3445;
+  font-size:13px; font-weight:600; cursor:pointer;
+}
+.cls-chip input{ display:none; }
+.cls-chip.on{ background:var(--dawn-dim); border-color:var(--dawn-dim); color:var(--dawn); }
+.buy-row{ grid-template-columns:1fr 1fr 30px; }
 </style>
 </head>
 
@@ -1432,13 +1443,12 @@ select.cp-sel option{ color:#222; background:#fff; }
         <input type="text" id="stuName" style="font-family:'Inter',sans-serif;">
       </div>
       <div class="field">
-        <label>所屬班級（來自「管理」內的班級時段）</label>
-        <select id="stuCls" style="font-family:'Inter',sans-serif;"></select>
+        <label>所屬班級（可複選，來自「管理」內的班級時段）</label>
+        <div class="cls-box" id="stuClsBox"></div>
       </div>
 
       <div class="field">
-        <label>課程購買紀錄（每購買一期＝8 堂）</label>
-        <div class="buy-head"><span>購買日期</span><span>學費</span><span>器材費</span><span></span></div>
+        <label>課程購買紀錄（每班每購買一期＝8 堂）</label>
         <div id="buyList"></div>
         <button type="button" class="btn" id="buyAddBtn" style="margin-top:8px;">＋ 新增一期</button>
       </div>
@@ -1565,7 +1575,7 @@ function classOptions(cur){
 const studentById = id => state.students.find(x => x.id === id) || null;
 function studentsOf(s){
   const n = (s.name || '').trim();
-  return n ? state.students.filter(st => st.cls === n) : [];
+  return n ? state.students.filter(st => (st.classes || []).includes(n)) : [];
 }
 function isPresent(ds, id, stId){
   const a = state.att[ds] && state.att[ds][id];
@@ -1596,22 +1606,33 @@ function attendedList(stId){
     const slots = slotsFor(ds);
     Object.keys(day).sort().forEach(id=>{
       if(!day[id].includes(stId)) return;
-      if(!slots.some(s => s.id === id)) return;
+      const sl = slots.find(s => s.id === id);
+      if(!sl) return;
       if(getRec(ds, id).off) return;      // 停課不計
-      out.push({ds, id});
+      out.push({ds, id, cls: (sl.name || '').trim()});
     });
   });
   return out;
 }
 function studentStats(st){
   const buys = st.buys || [];
-  const dated = buys.filter(b => b.date).map(b => b.date).sort();
-  const first = buys.length ? (dated[0] || '0000-00-00') : '';
-  const total = buys.length * SESSIONS_PER_TERM;
-  const att = first ? attendedList(st.id).filter(x => x.ds >= first) : [];
+  const names = [];
+  (st.classes || []).forEach(c => { if(!names.includes(c)) names.push(c); });
+  buys.forEach(b => { if(b.cls && !names.includes(b.cls)) names.push(b.cls); });
+  const all = attendedList(st.id);
+  const byClass = {};
+  names.forEach(c=>{
+    const bc = buys.filter(b => b.cls === c);
+    const dated = bc.filter(b => b.date).map(b => b.date).sort();
+    const first = bc.length ? (dated[0] || '0000-00-00') : '';
+    const att = first ? all.filter(x => x.cls === c && x.ds >= first) : [];
+    const total = bc.length * SESSIONS_PER_TERM;
+    byClass[c] = {periods: bc.length, total, used: att.length, remaining: total - att.length, att};
+  });
   let tuition = 0, gear = 0;
   buys.forEach(b => { tuition += +b.tuition || 0; gear += +b.gear || 0; });
-  return {periods: buys.length, total, used: att.length, remaining: total - att.length, att, tuition, gear};
+  const sum = k => Object.values(byClass).reduce((n, x) => n + x[k], 0);
+  return {byClass, names, periods: sum('periods'), total: sum('total'), used: sum('used'), remaining: sum('remaining'), tuition, gear};
 }
 function attInfo(ds, s){
   if(READONLY) return null;
@@ -1657,6 +1678,12 @@ function migrateMarks(m){
   });
   return m;
 }
+function migrateStudent(st){
+  if(!Array.isArray(st.classes)) st.classes = st.cls ? [st.cls] : [];   // 舊版：單一班級
+  delete st.cls;
+  st.buys = (st.buys || []).map(b => ({...b, cls: b.cls !== undefined ? b.cls : (st.classes[0] || '')}));
+  return st;
+}
 function applyData(d){
   if(!d) return;
   d = JSON.parse(JSON.stringify(d));   // 雲端回傳的資料是唯讀的，複製一份才能修改
@@ -1665,7 +1692,7 @@ function applyData(d){
   if(d.notes && typeof d.notes === 'object') state.notes = d.notes;
   if(d.extras && typeof d.extras === 'object') state.extras = d.extras;
   if(d.marks && typeof d.marks === 'object') state.marks = migrateMarks(d.marks);
-  if(Array.isArray(d.students)) state.students = d.students;
+  if(Array.isArray(d.students)) state.students = d.students.map(migrateStudent);
   if(d.att && typeof d.att === 'object') state.att = d.att;
 }
 function snapshotState(){ return JSON.parse(JSON.stringify(state)); }
@@ -1986,16 +2013,16 @@ function attHtml(ds, s){
   if(!list.length) return `<div class="att-head">點名</div><div class="att-empty">「${esc(slotName(s))}」還沒有學員，請到學員管理新增</div>`;
   const present = list.filter(st => isPresent(ds, s.id, st.id)).length;
   const rows = list.map(st=>{
-    const stt = studentStats(st);
+    const sc = studentStats(st).byClass[(s.name || '').trim()];
     const on = isPresent(ds, s.id, st.id);
     let right;
-    if(!stt.periods){
+    if(!sc || !sc.periods){
       right = `<span class="ar warn">未購課</span>`;
     }else{
-      const idx = stt.att.findIndex(x => x.ds === ds && x.id === s.id);
+      const idx = sc.att.findIndex(x => x.ds === ds && x.id === s.id);
       const no = (on && idx >= 0) ? `第${idx % SESSIONS_PER_TERM + 1}堂・` : '';
-      const cls = stt.remaining <= 0 ? 'warn' : (stt.remaining <= 2 ? 'low' : '');
-      right = `<span class="ar ${cls}">${no}剩 ${stt.remaining} 堂</span>`;
+      const cls = sc.remaining <= 0 ? 'warn' : (sc.remaining <= 2 ? 'low' : '');
+      right = `<span class="ar ${cls}">${no}剩 ${sc.remaining} 堂</span>`;
     }
     return `<label class="att-row"><input type="checkbox" data-att="${st.id}" ${on?'checked':''}><span class="an">${esc(st.name)}</span>${right}</label>`;
   }).join('');
@@ -2175,7 +2202,10 @@ document.getElementById('slotList').addEventListener('change', e=>{
     const old = (s.name || '').trim();
     s.name = e.target.value.trim();
     if(old && old !== s.name && !classNames().includes(old)){      // 班級改名：學員的所屬班級跟著改
-      state.students.forEach(st=>{ if(st.cls === old) st.cls = s.name; });
+      state.students.forEach(st=>{
+        st.classes = (st.classes || []).map(c => c === old ? s.name : c);
+        (st.buys || []).forEach(b => { if(b.cls === old) b.cls = s.name; });
+      });
     }
   }
   else if(f === 'from') s.from = e.target.value ? e.target.value + '-01' : '';
@@ -2312,19 +2342,26 @@ function renderStudents(){
     `共 ${state.students.length} 位學員・本月收款 學費 $${money(tu)}／器材費 $${money(gear)}`;
 
   const names = classNames();
-  const groups = names.map(n => ({n, list: state.students.filter(s => s.cls === n)}));
-  const other = state.students.filter(s => !names.includes(s.cls));
-  if(other.length) groups.push({n:'未分班', list: other});
+  const orphan = [];
+  state.students.forEach(st => (st.classes || []).forEach(c => { if(!names.includes(c) && !orphan.includes(c)) orphan.push(c); }));
+  const groups = names.concat(orphan).map(n => ({
+    n, label: names.includes(n) ? n : `${n}（班級已不存在）`,
+    list: state.students.filter(x => (x.classes || []).includes(n))
+  }));
+  const none = state.students.filter(x => !(x.classes || []).length);
+  if(none.length) groups.push({n:'', label:'未分班', list: none});
 
   const html = groups.filter(g => g.list.length).map(g=>`
     <div class="stu-group">
-      <div class="sg-head">${esc(g.n)}・${g.list.length} 人</div>
+      <div class="sg-head">${esc(g.label)}・${g.list.length} 人</div>
       ${g.list.map(st=>{
         const stt = studentStats(st);
-        const meta = stt.periods ? `已購 ${stt.periods} 期・已上 ${stt.used} 堂` : '尚未購買課程';
+        const bc = g.n ? stt.byClass[g.n] : null;
+        const meta = (bc && bc.periods) ? `已購 ${bc.periods} 期・已上 ${bc.used} 堂` : '尚未購買課程';
+        const multi = (st.classes || []).length > 1 ? `・共 ${st.classes.length} 班` : '';
         return `<div class="stu-row" data-sid="${st.id}">
-          <div><b>${esc(st.name)}</b><small>${meta}</small></div>
-          ${remChip(stt)}
+          <div><b>${esc(st.name)}</b><small>${meta}${multi}</small></div>
+          ${remChip(bc || {periods:0})}
         </div>`;
       }).join('')}
     </div>`).join('');
@@ -2339,7 +2376,7 @@ function addStudent(){
   const st = {
     id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,4),
     name,
-    cls: document.getElementById('stuAddCls').value,
+    classes: document.getElementById('stuAddCls').value ? [document.getElementById('stuAddCls').value] : [],
     buys: []
   };
   state.students.push(st);
@@ -2365,26 +2402,51 @@ function renderStuModal(){
   const st = studentById(editingStu);
   if(!st){ stuOverlay.classList.remove('show'); return; }
   document.getElementById('stuName').value = st.name;
-  document.getElementById('stuCls').innerHTML = classOptions(st.cls);
 
   const stt = studentStats(st);
-  const order = (st.buys || []).slice().sort((a,b)=> (a.date || '').localeCompare(b.date || '')).map(b => b.id);
+  const names = classNames();
+  const allNames = names.concat(stt.names.filter(n => !names.includes(n)));
+  document.getElementById('stuClsBox').innerHTML = allNames.length
+    ? allNames.map(n=>{
+        const on = (st.classes || []).includes(n);
+        return `<label class="cls-chip ${on?'on':''}"><input type="checkbox" data-cls="${esc(n)}" ${on?'checked':''}>${esc(n)}</label>`;
+      }).join('')
+    : `<div class="att-empty">還沒有班級，請先到「管理」新增班級時段並命名</div>`;
+
+  const rank = {};
+  Object.keys(stt.byClass).forEach(c=>{
+    (st.buys || []).filter(b => b.cls === c)
+      .sort((a,b)=> (a.date || '').localeCompare(b.date || ''))
+      .forEach((b,i)=>{ rank[b.id] = i; });
+  });
+  const clsOpts = cur => `<option value="">請選擇班級</option>` +
+    stt.names.map(n => `<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
+
   document.getElementById('buyList').innerHTML = (st.buys || []).map(b=>{
-    const k = order.indexOf(b.id);
-    const u = Math.max(0, Math.min(SESSIONS_PER_TERM, stt.used - k * SESSIONS_PER_TERM));
+    let prog = '請選擇這一期是哪個班級';
+    if(b.cls && rank[b.id] !== undefined){
+      const k = rank[b.id];
+      const u = Math.max(0, Math.min(SESSIONS_PER_TERM, stt.byClass[b.cls].used - k * SESSIONS_PER_TERM));
+      prog = `${esc(b.cls)}　第 ${k+1} 期　已上 ${u} / ${SESSIONS_PER_TERM} 堂`;
+    }
     return `<div class="buy-row" data-bid="${b.id}">
       <input type="date" data-bf="date" value="${esc(b.date || '')}">
+      <select data-bf="cls" style="font-family:'Inter',sans-serif;">${clsOpts(b.cls || '')}</select>
+      <button type="button" class="btn btn-ghost btn-danger" data-bdel="${b.id}">✕</button>
       <input type="number" inputmode="numeric" min="0" step="1" data-bf="tuition" placeholder="學費" value="${b.tuition === '' || b.tuition == null ? '' : esc(b.tuition)}">
       <input type="number" inputmode="numeric" min="0" step="1" data-bf="gear" placeholder="器材費" value="${b.gear === '' || b.gear == null ? '' : esc(b.gear)}">
-      <button type="button" class="btn btn-ghost btn-danger" data-bdel="${b.id}">✕</button>
-      <div class="buy-prog">第 ${k+1} 期　已上 ${u} / ${SESSIONS_PER_TERM} 堂</div>
+      <span></span>
+      <div class="buy-prog">${prog}</div>
     </div>`;
   }).join('') || `<div class="att-empty">還沒有購買紀錄，請按「新增一期」</div>`;
 
-  document.getElementById('stuInfo').innerHTML = stt.periods
-    ? `已購 <b>${stt.periods}</b> 期（共 ${stt.total} 堂）・已上 <b>${stt.used}</b> 堂・<b>剩 ${stt.remaining} 堂</b><br>
-       累計繳費 <b>$${money(stt.tuition + stt.gear)}</b>（學費 $${money(stt.tuition)}／器材費 $${money(stt.gear)}）`
-    : `尚未購買課程，新增一期後即可開始計算剩餘堂數`;
+  const lines = Object.keys(stt.byClass).filter(c => stt.byClass[c].periods).map(c=>{
+    const x = stt.byClass[c];
+    return `${esc(c)}：已購 ${x.periods} 期（${x.total} 堂）・已上 ${x.used} 堂・<b>剩 ${x.remaining} 堂</b>`;
+  });
+  document.getElementById('stuInfo').innerHTML = lines.length
+    ? `${lines.join('<br>')}<br>累計繳費 <b>$${money(stt.tuition + stt.gear)}</b>（學費 $${money(stt.tuition)}／器材費 $${money(stt.gear)}）`
+    : `尚未購買課程，新增一期並選擇班級後即可開始計算剩餘堂數`;
 }
 function openStudentModal(id){
   editingStu = id;
@@ -2402,9 +2464,14 @@ document.getElementById('stuName').addEventListener('change', e=>{
   if(!v){ e.target.value = st.name; return; }
   st.name = v; persist(); renderAll();
 });
-document.getElementById('stuCls').addEventListener('change', e=>{
-  const st = studentById(editingStu); if(!st) return;
-  st.cls = e.target.value; persist(); renderAll();
+document.getElementById('stuClsBox').addEventListener('change', e=>{
+  const st = studentById(editingStu);
+  const n = e.target.dataset.cls;
+  if(!st || n === undefined) return;
+  const list = (st.classes || []).filter(c => c !== n);
+  if(e.target.checked) list.push(n);
+  st.classes = list;
+  persist(); renderStuModal(); renderAll();
 });
 document.getElementById('buyAddBtn').addEventListener('click', ()=>{
   const st = studentById(editingStu); if(!st) return;
@@ -2413,6 +2480,7 @@ document.getElementById('buyAddBtn').addEventListener('click', ()=>{
   st.buys.push({
     id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2,4),
     date: todayStr,
+    cls: last ? last.cls : ((st.classes || [])[0] || ''),
     tuition: last ? last.tuition : '',
     gear: ''
   });
@@ -2426,6 +2494,7 @@ document.getElementById('buyList').addEventListener('change', e=>{
   const b = (st.buys || []).find(x => x.id === row.dataset.bid);
   if(!b) return;
   if(f === 'date') b.date = e.target.value;
+  else if(f === 'cls') b.cls = e.target.value;
   else{
     const v = parseFloat(e.target.value);
     b[f] = isNaN(v) ? '' : v;
