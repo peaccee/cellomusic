@@ -1,0 +1,24 @@
+
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Taiwan time: 09:17, 15:17, 21:17
+    - cron: "17 1,7,13 * * *"
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Supabase database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --retry-delay 10 \
+            "${SUPABASE_URL}/rest/v1/parttime_schedule?select=*&limit=1" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}"
