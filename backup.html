@@ -1,0 +1,39 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>班表資料備份</title>
+</head>
+<body style="font-family: sans-serif; padding: 30px; line-height: 1.8;">
+  <h2>班表資料備份</h2>
+  <p>請按下方按鈕，下載這台裝置的班表資料。</p>
+  <button id="backup" style="font-size:18px;padding:14px 22px;">
+    下載手機班表備份
+  </button>
+  <p id="status"></p>
+
+  <script>
+    document.getElementById('backup').onclick = function () {
+      const data = localStorage.getItem('xuqu-schedule-cache');
+      const status = document.getElementById('status');
+
+      if (!data) {
+        status.textContent = '找不到這台裝置的班表資料，請確認是否使用正確的網址。';
+        return;
+      }
+
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'xuqu-phone-backup.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      status.textContent = '已開始下載手機班表備份。';
+    };
+  </script>
+</body>
+</html>
