@@ -1309,7 +1309,23 @@ select.cp-sel option{ color:#222; background:#fff; }
 }
 .cls-chip input{ display:none; }
 .cls-chip.on{ background:var(--dawn-dim); border-color:var(--dawn-dim); color:var(--dawn); }
-.buy-row{ grid-template-columns:1fr 1fr 30px; }
+.buy-row{ grid-template-columns:1fr 1fr 62px; }
+.buy-row input[data-bf=n]{ text-align:center; }
+
+/* 班級時段：自選日期 */
+.slot-row{ grid-template-columns:92px 1fr 1fr 34px; }
+.slot-row .sr-from select{ width:auto; flex:0 0 auto; padding:6px; }
+.slot-row .sr-dates{ grid-column:1 / -1; }
+.dchips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+.dchip{
+  display:inline-flex; align-items:center; gap:2px; padding:3px 4px 3px 10px; border-radius:999px;
+  background:rgba(92,103,125,0.14); font-family:'IBM Plex Mono',monospace; font-size:12px; color:#2b3445;
+}
+.dchip button{ border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:12px; padding:0 6px; }
+.dadd{ display:flex; gap:6px; }
+.dadd input{ flex:1; min-width:0; }
+.dadd .btn{ flex:0 0 auto; padding:6px 12px; }
+.sync-info{ cursor:pointer; }
 </style>
 </head>
 
@@ -1387,7 +1403,7 @@ select.cp-sel option{ color:#222; background:#fff; }
 
       <div class="m-block">
         <div class="field">
-          <label>快速新增（例：週三 18:30-20:00 初級弦樂班）</label>
+          <label>快速新增（每週：週三 18:30-20:00 班級名稱；自選日期：11/7 11/21 10:00-12:00 班級名稱）</label>
           <div style="display:flex;gap:8px;">
             <input type="text" id="quickInput" placeholder="週六 10:00-12:00 班級名稱">
             <button class="btn btn-primary" id="quickAddBtn" style="flex:0 0 auto;">新增</button>
@@ -1397,7 +1413,7 @@ select.cp-sel option{ color:#222; background:#fff; }
           <label>目前班級時段（可直接修改）</label>
           <div id="slotList"></div>
         </div>
-        <div class="hint-box">新增的時段預設從目前檢視的月份起算，不會影響過去月份。</div>
+        <div class="hint-box">每週重複的時段預設從目前檢視的月份起算，不會影響過去月份；自選日期的時段只會出現在你選的那幾天。</div>
       </div>
 
       <div class="m-block">
@@ -1406,6 +1422,14 @@ select.cp-sel option{ color:#222; background:#fff; }
         <div style="display:flex;gap:8px;margin-top:6px;">
           <input type="text" id="staffInput" placeholder="新增人員姓名" style="font-family:'Inter',sans-serif;">
           <button class="btn btn-primary" id="staffAddBtn" style="flex:0 0 auto;">新增</button>
+        </div>
+      </div>
+
+      <div class="m-block">
+        <div class="m-title">學員課程設定</div>
+        <div class="field">
+          <label>預設每期堂數（新增購買紀錄時帶入，每一期仍可個別修改）</label>
+          <input type="number" id="defaultTermInput" min="1" step="1">
         </div>
       </div>
 
@@ -1436,7 +1460,7 @@ select.cp-sel option{ color:#222; background:#fff; }
     <div class="modal-wrap">
       <button class="btn btn-ghost modal-close" id="closeStuBtn">✕</button>
       <h2>學員資料</h2>
-      <div class="sub">變更會自動儲存；每一期課程為 8 堂</div>
+      <div class="sub">變更會自動儲存；每一期的堂數可自訂</div>
 
       <div class="field">
         <label>學員姓名</label>
@@ -1448,7 +1472,7 @@ select.cp-sel option{ color:#222; background:#fff; }
       </div>
 
       <div class="field">
-        <label>課程購買紀錄（每班每購買一期＝8 堂）</label>
+        <label>課程購買紀錄（每一期的堂數可自訂，預設 8 堂）</label>
         <div id="buyList"></div>
         <button type="button" class="btn" id="buyAddBtn" style="margin-top:8px;">＋ 新增一期</button>
       </div>
@@ -1498,7 +1522,7 @@ const DEFAULT_SLOTS = [
 let state = {
   slots: DEFAULT_SLOTS.map(s=>({...s})),
   staff: [{id:'p1', name:'晏存', c:0}],
-  marks:{}, notes:{}, extras:{}, students:[], att:{}
+  marks:{}, notes:{}, extras:{}, students:[], att:{}, defaultTerm:8
 };
 
 const todayObj = new Date();
@@ -1537,7 +1561,9 @@ function staffOptions(sel){
 /* ---------- 時段與紀錄 ---------- */
 function slotsFor(ds){
   const wd = weekdayOf(ds);
-  const regular = state.slots.filter(s => s.wd === wd && (!s.from || ds >= s.from));
+  const regular = state.slots.filter(s => s.mode === 'dates'
+    ? (s.dates || []).includes(ds)
+    : (s.wd === wd && (!s.from || ds >= s.from)));
   const extra = (state.extras[ds] || []).map(x => ({...x, wd, extra:true}));
   return regular.concat(extra).sort((a,b) => toMin(a.start) - toMin(b.start));
 }
@@ -1555,7 +1581,8 @@ function setRec(ds, id, patch){
 }
 
 /* ---------- 學員、點名、剩餘堂數 ---------- */
-const SESSIONS_PER_TERM = 8;
+const FALLBACK_TERM = 8;
+const termSize = b => { const n = parseInt(b && b.n, 10); return n > 0 ? n : (state.defaultTerm || FALLBACK_TERM); };
 const money = n => Math.round(n || 0).toLocaleString('en-US');
 
 function classNames(){
@@ -1614,6 +1641,14 @@ function attendedList(stId){
   });
   return out;
 }
+function termPos(sc, idx){          // 第 idx 堂（0 起算）落在第幾期的第幾堂
+  let cum = 0;
+  for(const t of sc.terms){
+    if(idx < cum + t.n) return {pos: idx - cum + 1, n: t.n, over:false};
+    cum += t.n;
+  }
+  return {pos: idx - cum + 1, n: 0, over:true};
+}
 function studentStats(st){
   const buys = st.buys || [];
   const names = [];
@@ -1622,12 +1657,13 @@ function studentStats(st){
   const all = attendedList(st.id);
   const byClass = {};
   names.forEach(c=>{
-    const bc = buys.filter(b => b.cls === c);
+    const bc = buys.filter(b => b.cls === c).slice().sort((a,b) => (a.date || '').localeCompare(b.date || ''));
     const dated = bc.filter(b => b.date).map(b => b.date).sort();
     const first = bc.length ? (dated[0] || '0000-00-00') : '';
     const att = first ? all.filter(x => x.cls === c && x.ds >= first) : [];
-    const total = bc.length * SESSIONS_PER_TERM;
-    byClass[c] = {periods: bc.length, total, used: att.length, remaining: total - att.length, att};
+    let cum = 0;
+    const terms = bc.map(b => { const n = termSize(b); const t = {id:b.id, n, before:cum}; cum += n; return t; });
+    byClass[c] = {periods: bc.length, total: cum, used: att.length, remaining: cum - att.length, att, terms};
   });
   let tuition = 0, gear = 0;
   buys.forEach(b => { tuition += +b.tuition || 0; gear += +b.gear || 0; });
@@ -1660,6 +1696,8 @@ let saveTimer = null;
 let saveSeq = 0;
 let pendingSave = false;
 let lastPushed = '';
+const ownStamps = new Set();
+const DIRTY_FLAG = 'xuqu-dirty';
 
 function migrateMarks(m){
   const first = (state.staff[0] && state.staff[0].id) || '';
@@ -1681,7 +1719,7 @@ function migrateMarks(m){
 function migrateStudent(st){
   if(!Array.isArray(st.classes)) st.classes = st.cls ? [st.cls] : [];   // 舊版：單一班級
   delete st.cls;
-  st.buys = (st.buys || []).map(b => ({...b, cls: b.cls !== undefined ? b.cls : (st.classes[0] || '')}));
+  st.buys = (st.buys || []).map(b => ({...b, cls: b.cls !== undefined ? b.cls : (st.classes[0] || ''), n: b.n !== undefined ? b.n : 8}));
   return st;
 }
 function applyData(d){
@@ -1694,6 +1732,7 @@ function applyData(d){
   if(d.marks && typeof d.marks === 'object') state.marks = migrateMarks(d.marks);
   if(Array.isArray(d.students)) state.students = d.students.map(migrateStudent);
   if(d.att && typeof d.att === 'object') state.att = d.att;
+  if(typeof d.defaultTerm === 'number' && d.defaultTerm > 0) state.defaultTerm = d.defaultTerm;
 }
 function snapshotState(){ return JSON.parse(JSON.stringify(state)); }
 function writeCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(state)); }catch(e){} }
@@ -1705,6 +1744,9 @@ function readCache(){
   return false;
 }
 function markSynced(){ try{ localStorage.setItem(SYNC_FLAG, '1'); }catch(e){} }
+function markDirty(){ try{ localStorage.setItem(DIRTY_FLAG, '1'); }catch(e){} }
+function clearDirty(){ try{ localStorage.removeItem(DIRTY_FLAG); }catch(e){} }
+function isDirty(){ try{ return localStorage.getItem(DIRTY_FLAG) === '1'; }catch(e){ return false; } }
 function neverSynced(){ try{ return !localStorage.getItem(SYNC_FLAG); }catch(e){ return false; } }
 
 async function loadData(){
@@ -1723,7 +1765,10 @@ async function loadData(){
   try{
     dbRef = db.doc(DOC_PATH);
     const snap = await dbRef.get();
-    if(snap.exists){
+    if(snap.exists && isDirty() && hadLocal && !READONLY){
+      updateSyncInfo('上傳此裝置尚未同步的修改…');
+      await pushDb();                 // 這個裝置有還沒上傳的修改：以本機為準
+    }else if(snap.exists){
       applyData(snap.data());
       if(hadLocal && neverSynced() && !READONLY){
         Object.keys(local.marks || {}).forEach(k=>{ if(!state.marks[k]) state.marks[k] = local.marks[k]; });
@@ -1747,12 +1792,12 @@ async function loadData(){
     dbRef.onSnapshot(s=>{
       if(!s.exists || pendingSave) return;
       const d = s.data();
-      if(d.updatedAt && lastPushed && d.updatedAt <= lastPushed) return;
+      if(d.updatedAt && ownStamps.has(d.updatedAt)) return;     // 自己寫入的回聲
       applyData(d);
       writeCache();
       renderAll();
       updateSyncInfo('已同步最新資料');
-    }, ()=>{});
+    }, e=>{ updateSyncInfo('雲端連線中斷：' + ((e && e.code) || '未知原因') + '，請重新整理頁面'); });
   }catch(e){
     console.error('雲端讀取失敗', e);
     dbRef = null;
@@ -1763,6 +1808,7 @@ async function loadData(){
 function persist(){
   if(READONLY) return;
   writeCache();
+  markDirty();
   if(!dbRef){ updateSyncInfo('已儲存於此裝置'); return; }
   pendingSave = true;
   saveSeq++;
@@ -1775,17 +1821,38 @@ async function pushDb(){
   const seq = saveSeq;
   const stamp = new Date().toISOString();
   lastPushed = stamp;
+  ownStamps.add(stamp);
   updateSyncInfo('正在同步…');
   try{
     await dbRef.set({ ...snapshotState(), updatedAt: stamp });
+    if(seq === saveSeq) clearDirty();
     updateSyncInfo('剛剛已同步');
   }catch(e){
     console.error('雲端同步失敗', e);
-    updateSyncInfo('同步失敗（已存此裝置）');
+    updateSyncInfo('同步失敗：' + ((e && (e.code || e.message)) || '未知原因') + '（已存此裝置，點此重試）');
   }finally{
     if(seq === saveSeq) pendingSave = false;
   }
 }
+
+async function refreshFromCloud(manual){
+  if(!dbRef){ if(manual) showToast('目前沒有連上雲端，只存在此裝置'); return; }
+  if(pendingSave){ if(manual) showToast('正在同步中，請稍候'); return; }
+  try{
+    if(isDirty() && manual){ await pushDb(); return; }       // 有尚未上傳的修改：先上傳
+    const snap = await dbRef.get();
+    if(!snap.exists){ if(manual) showToast('雲端還沒有資料'); return; }
+    const d = snap.data();
+    if(d.updatedAt && ownStamps.has(d.updatedAt)){ if(manual) showToast('已是最新資料'); return; }
+    applyData(d); writeCache(); renderAll();
+    updateSyncInfo('已同步最新資料');
+    if(manual) showToast('已從雲端更新');
+  }catch(e){
+    updateSyncInfo('同步失敗：' + ((e && (e.code || e.message)) || '未知原因'));
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshFromCloud(false); });
+document.getElementById('syncInfo').addEventListener('click', ()=> refreshFromCloud(true));
 
 /* =========================================================
    統計（每位值班人員）
@@ -2020,7 +2087,11 @@ function attHtml(ds, s){
       right = `<span class="ar warn">未購課</span>`;
     }else{
       const idx = sc.att.findIndex(x => x.ds === ds && x.id === s.id);
-      const no = (on && idx >= 0) ? `第${idx % SESSIONS_PER_TERM + 1}堂・` : '';
+      let no = '';
+      if(on && idx >= 0){
+        const tp = termPos(sc, idx);
+        no = tp.over ? `超堂第${tp.pos}堂・` : `第${tp.pos}/${tp.n}堂・`;
+      }
       const cls = sc.remaining <= 0 ? 'warn' : (sc.remaining <= 2 ? 'low' : '');
       right = `<span class="ar ${cls}">${no}剩 ${sc.remaining} 堂</span>`;
     }
@@ -2154,22 +2225,44 @@ dayOverlay.addEventListener('click', e=>{ if(e.target === dayOverlay) dayOverlay
 const manageOverlay = document.getElementById('manageOverlay');
 
 function renderSlotList(){
-  const sorted = [...state.slots].sort((a,b)=>
-    ((a.wd+6)%7) - ((b.wd+6)%7) || toMin(a.start) - toMin(b.start));
+  const key = s => s.mode === 'dates'
+    ? [1, ((s.dates || [])[0] || '9999'), toMin(s.start)]
+    : [0, String((s.wd + 6) % 7), toMin(s.start)];
+  const sorted = [...state.slots].sort((a,b)=>{
+    const ka = key(a), kb = key(b);
+    for(let i=0;i<3;i++){ if(ka[i] < kb[i]) return -1; if(ka[i] > kb[i]) return 1; }
+    return 0;
+  });
   const wdOptions = cur => WD.map((n,i)=> `<option value="${i}" ${i===cur?'selected':''}>${n}</option>`).join('');
   document.getElementById('slotList').innerHTML = sorted.length
-    ? sorted.map(s=>`
+    ? sorted.map(s=>{
+        const isDates = s.mode === 'dates';
+        const dates = (s.dates || []).slice().sort();
+        const tail = isDates
+          ? `<div class="sr-dates">
+              <div class="dchips">${dates.map(d=>{
+                const [y,m,dd] = d.split('-').map(Number);
+                return `<span class="dchip" title="${d}">${m}/${dd}<button type="button" data-deldate="${d}">✕</button></span>`;
+              }).join('') || '<span class="att-empty">還沒有日期，請在下方加入</span>'}</div>
+              <div class="dadd"><input type="date" data-f="newdate"><button type="button" class="btn" data-adddate>加入日期</button></div>
+            </div>`
+          : `<div class="sr-from">每 <select data-f="wd">${wdOptions(s.wd)}</select> 自
+              <input type="month" data-f="from" value="${s.from ? s.from.slice(0,7) : ''}">
+              起（留空＝一直有）
+            </div>`;
+        return `
       <div class="slot-row" data-id="${s.id}">
         <input type="text" class="sr-name" data-f="name" placeholder="班級名稱" value="${esc(s.name || '')}">
-        <select data-f="wd">${wdOptions(s.wd)}</select>
+        <select data-f="mode">
+          <option value="weekly" ${isDates?'':'selected'}>每週重複</option>
+          <option value="dates" ${isDates?'selected':''}>自選日期</option>
+        </select>
         <input type="time" data-f="start" value="${s.start}">
         <input type="time" data-f="end" value="${s.end}">
         <button type="button" class="btn btn-ghost btn-danger sr-del" data-del="${s.id}">✕</button>
-        <div class="sr-from">自
-          <input type="month" data-f="from" value="${s.from ? s.from.slice(0,7) : ''}">
-          起適用（留空＝一直有）
-        </div>
-      </div>`).join('')
+        ${tail}
+      </div>`;
+      }).join('')
     : `<div class="empty-state">還沒有班級時段，請在上方快速新增</div>`;
 }
 function renderStaffList(){
@@ -2184,6 +2277,7 @@ function renderStaffList(){
 document.getElementById('openManageBtn').addEventListener('click', ()=>{
   renderSlotList();
   renderStaffList();
+  document.getElementById('defaultTermInput').value = state.defaultTerm || FALLBACK_TERM;
   manageOverlay.classList.add('show');
 });
 function closeManage(){ manageOverlay.classList.remove('show'); }
@@ -2197,6 +2291,13 @@ document.getElementById('slotList').addEventListener('change', e=>{
   if(!row || !f) return;
   const s = state.slots.find(x=> x.id === row.dataset.id);
   if(!s) return;
+  if(f === 'newdate') return;                      // 由「加入日期」按鈕處理
+  if(f === 'mode'){
+    s.mode = e.target.value === 'dates' ? 'dates' : 'weekly';
+    if(s.mode === 'dates' && !Array.isArray(s.dates)) s.dates = [];
+    persist(); renderSlotList(); renderAll();
+    return;
+  }
   if(f === 'wd') s.wd = Number(e.target.value);
   else if(f === 'name'){
     const old = (s.name || '').trim();
@@ -2214,6 +2315,21 @@ document.getElementById('slotList').addEventListener('change', e=>{
   renderAll();
 });
 document.getElementById('slotList').addEventListener('click', e=>{
+  const row = e.target.closest('.slot-row');
+  const slot = row ? state.slots.find(x=> x.id === row.dataset.id) : null;
+  if(slot && e.target.closest('[data-adddate]')){
+    const v = row.querySelector('[data-f="newdate"]').value;
+    if(!v){ showToast('請先選擇日期'); return; }
+    slot.dates = Array.from(new Set([...(slot.dates || []), v])).sort();
+    persist(); renderSlotList(); renderAll();
+    return;
+  }
+  const dd = e.target.closest('[data-deldate]');
+  if(slot && dd){
+    slot.dates = (slot.dates || []).filter(x=> x !== dd.dataset.deldate);
+    persist(); renderSlotList(); renderAll();
+    return;
+  }
   const del = e.target.closest('[data-del]');
   if(!del) return;
   const id = del.dataset.del;
@@ -2227,34 +2343,50 @@ document.getElementById('slotList').addEventListener('click', e=>{
 });
 
 /* ---------- 快速新增：週三 18:30-20:00 班級名稱 ---------- */
+const TIME_RE = '(\\d{1,2})(?::(\\d{2}))?\\s*[-~～－—–至到]\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(.*)$';
 function parseQuick(text){
-  const m = text.trim().match(/^(?:週|周|星期|禮拜)?([日天一二三四五六])\s*(\d{1,2})(?:[:：](\d{2}))?\s*[-~～－—–至到]\s*(\d{1,2})(?:[:：](\d{2}))?\s*(.*)$/);
+  const t = text.trim().replace(/：/g, ':');
+  let m = t.match(new RegExp('^(?:週|周|星期|禮拜)?([日天一二三四五六])\\s*' + TIME_RE));
+  if(m){
+    return {mode:'weekly', wd:'日一二三四五六'.indexOf(m[1] === '天' ? '日' : m[1]),
+      start:`${pad(+m[2])}:${m[3] || '00'}`, end:`${pad(+m[4])}:${m[5] || '00'}`, name:(m[6] || '').trim()};
+  }
+  const D = '(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{1,2}/\\d{1,2})';
+  m = t.match(new RegExp('^(' + D + '(?:[\\s,、，]+' + D + ')*)\\s+' + TIME_RE));
   if(!m) return null;
-  return {
-    wd: '日一二三四五六'.indexOf(m[1] === '天' ? '日' : m[1]),
-    start: `${pad(+m[2])}:${m[3] || '00'}`,
-    end: `${pad(+m[4])}:${m[5] || '00'}`,
-    name: (m[6] || '').trim()
-  };
+  const dates = m[1].split(/[\s,、，]+/).map(tok=>{
+    const q = tok.split(/[-/]/).map(Number);
+    return q.length === 3 ? fmtDate(q[0], q[1], q[2]) : fmtDate(viewYear, q[0], q[1]);
+  });
+  return {mode:'dates', dates:Array.from(new Set(dates)).sort(),
+    start:`${pad(+m[2])}:${m[3] || '00'}`, end:`${pad(+m[4])}:${m[5] || '00'}`, name:(m[6] || '').trim()};
 }
 function quickAdd(){
   const input = document.getElementById('quickInput');
   const p = parseQuick(input.value);
-  if(!p){ showToast('格式範例：週三 18:30-20:00 班級名稱'); return; }
-  state.slots.push({
-    id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
-    wd: p.wd, start: p.start, end: p.end, name: p.name,
-    from: fmtDate(viewYear, viewMonth, 1)
-  });
+  if(!p){ showToast('格式：週三 18:30-20:00 班級名稱，或 11/7 11/21 10:00-12:00 班級名稱'); return; }
+  const id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  if(p.mode === 'dates'){
+    state.slots.push({id, mode:'dates', dates:p.dates, start:p.start, end:p.end, name:p.name});
+  }else{
+    state.slots.push({id, mode:'weekly', wd:p.wd, start:p.start, end:p.end, name:p.name, from: fmtDate(viewYear, viewMonth, 1)});
+  }
   input.value = '';
   persist();
   renderSlotList();
   renderAll();
-  showToast(`已新增 ${WD[p.wd]} ${p.start}–${p.end}`);
+  showToast(p.mode === 'dates' ? `已新增自選日期班級（${p.dates.length} 天）` : `已新增 ${WD[p.wd]} ${p.start}–${p.end}`);
 }
 document.getElementById('quickAddBtn').addEventListener('click', quickAdd);
 document.getElementById('quickInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter'){ e.preventDefault(); quickAdd(); }
+});
+
+document.getElementById('defaultTermInput').addEventListener('change', e=>{
+  const v = parseInt(e.target.value, 10);
+  state.defaultTerm = v > 0 ? v : FALLBACK_TERM;
+  e.target.value = state.defaultTerm;
+  persist();
 });
 
 /* ---------- 值班人員 ---------- */
@@ -2415,19 +2547,17 @@ function renderStuModal(){
 
   const rank = {};
   Object.keys(stt.byClass).forEach(c=>{
-    (st.buys || []).filter(b => b.cls === c)
-      .sort((a,b)=> (a.date || '').localeCompare(b.date || ''))
-      .forEach((b,i)=>{ rank[b.id] = i; });
+    stt.byClass[c].terms.forEach((t,i)=>{ rank[t.id] = {k:i, t, c}; });
   });
   const clsOpts = cur => `<option value="">請選擇班級</option>` +
     stt.names.map(n => `<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
 
   document.getElementById('buyList').innerHTML = (st.buys || []).map(b=>{
     let prog = '請選擇這一期是哪個班級';
-    if(b.cls && rank[b.id] !== undefined){
-      const k = rank[b.id];
-      const u = Math.max(0, Math.min(SESSIONS_PER_TERM, stt.byClass[b.cls].used - k * SESSIONS_PER_TERM));
-      prog = `${esc(b.cls)}　第 ${k+1} 期　已上 ${u} / ${SESSIONS_PER_TERM} 堂`;
+    const r = rank[b.id];
+    if(b.cls && r){
+      const u = Math.max(0, Math.min(r.t.n, stt.byClass[b.cls].used - r.t.before));
+      prog = `${esc(b.cls)}　第 ${r.k+1} 期　已上 ${u} / ${r.t.n} 堂`;
     }
     return `<div class="buy-row" data-bid="${b.id}">
       <input type="date" data-bf="date" value="${esc(b.date || '')}">
@@ -2435,14 +2565,14 @@ function renderStuModal(){
       <button type="button" class="btn btn-ghost btn-danger" data-bdel="${b.id}">✕</button>
       <input type="number" inputmode="numeric" min="0" step="1" data-bf="tuition" placeholder="學費" value="${b.tuition === '' || b.tuition == null ? '' : esc(b.tuition)}">
       <input type="number" inputmode="numeric" min="0" step="1" data-bf="gear" placeholder="器材費" value="${b.gear === '' || b.gear == null ? '' : esc(b.gear)}">
-      <span></span>
+      <input type="number" inputmode="numeric" min="1" step="1" data-bf="n" title="本期堂數" placeholder="堂數" value="${termSize(b)}">
       <div class="buy-prog">${prog}</div>
     </div>`;
   }).join('') || `<div class="att-empty">還沒有購買紀錄，請按「新增一期」</div>`;
 
   const lines = Object.keys(stt.byClass).filter(c => stt.byClass[c].periods).map(c=>{
     const x = stt.byClass[c];
-    return `${esc(c)}：已購 ${x.periods} 期（${x.total} 堂）・已上 ${x.used} 堂・<b>剩 ${x.remaining} 堂</b>`;
+    return `${esc(c)}：已購 ${x.periods} 期（共 ${x.total} 堂）・已上 ${x.used} 堂・<b>剩 ${x.remaining} 堂</b>`;
   });
   document.getElementById('stuInfo').innerHTML = lines.length
     ? `${lines.join('<br>')}<br>累計繳費 <b>$${money(stt.tuition + stt.gear)}</b>（學費 $${money(stt.tuition)}／器材費 $${money(stt.gear)}）`
@@ -2481,6 +2611,11 @@ document.getElementById('buyAddBtn').addEventListener('click', ()=>{
     id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2,4),
     date: todayStr,
     cls: last ? last.cls : ((st.classes || [])[0] || ''),
+    n: (() => {
+      const cl = last ? last.cls : ((st.classes || [])[0] || '');
+      const same = st.buys.filter(x => x.cls === cl);
+      return same.length ? termSize(same[same.length - 1]) : (state.defaultTerm || FALLBACK_TERM);
+    })(),
     tuition: last ? last.tuition : '',
     gear: ''
   });
@@ -2495,6 +2630,10 @@ document.getElementById('buyList').addEventListener('change', e=>{
   if(!b) return;
   if(f === 'date') b.date = e.target.value;
   else if(f === 'cls') b.cls = e.target.value;
+  else if(f === 'n'){
+    const v = parseInt(e.target.value, 10);
+    b.n = v > 0 ? v : (state.defaultTerm || FALLBACK_TERM);
+  }
   else{
     const v = parseFloat(e.target.value);
     b[f] = isNaN(v) ? '' : v;
