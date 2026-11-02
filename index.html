@@ -1433,6 +1433,16 @@ select.cp-sel option{ color:#222; background:#fff; }
         </div>
       </div>
 
+      <div class="m-block">
+        <div class="m-title">資料備份與轉移</div>
+        <div class="hint-box">在有資料的裝置按「產生備份文字」並複製；到另一個裝置貼上後按「匯入」。匯入會取代目前所有資料。</div>
+        <textarea id="backupText" placeholder="備份文字會顯示在這裡；要匯入時請把備份文字貼在這裡" style="min-height:90px;font-size:11px;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn" id="backupMakeBtn" style="flex:1;justify-content:center;">產生備份文字</button>
+          <button class="btn btn-primary" id="backupImportBtn" style="flex:1;justify-content:center;">匯入</button>
+        </div>
+      </div>
+
       <div class="hint-box">給對方看的唯讀連結：在網址後面加上 <code>#view</code></div>
 
       <div class="modal-actions">
@@ -1488,6 +1498,36 @@ select.cp-sel option{ color:#222; background:#fff; }
 </div>
 
 <script>
+/* =========================================================
+   雲端同步設定（自己架站，例如 GitHub Pages 時使用）
+   到 jsonbin.io 建立一個 Bin，把 BIN_ID 與 API_KEY 填在下面，
+   手機和電腦就會共用同一份資料。留空＝只存在此瀏覽器。
+   （在 claude.ai 的連結裡執行時，會自動使用內建資料庫，不需要填）
+   ========================================================= */
+const CONFIG = {
+  BIN_ID:'',
+  API_KEY:''
+};
+const jsonbinOn = () => !!(CONFIG.BIN_ID && CONFIG.API_KEY);
+function jsonbinDoc(){
+  const url = `https://api.jsonbin.io/v3/b/${CONFIG.BIN_ID}`;
+  return {
+    get: async ()=>{
+      const res = await fetch(url + '/latest', {headers:{'X-Master-Key': CONFIG.API_KEY}, cache:'no-store'});
+      if(!res.ok) throw {code:'http_' + res.status};
+      const j = await res.json();
+      const rec = j.record;
+      return {exists: !!(rec && Array.isArray(rec.slots)), data: ()=> rec};
+    },
+    set: async (x)=>{
+      const res = await fetch(url, {method:'PUT',
+        headers:{'Content-Type':'application/json','X-Master-Key': CONFIG.API_KEY}, body: JSON.stringify(x)});
+      if(!res.ok) throw {code:'http_' + res.status};
+    },
+    onSnapshot: ()=> ()=>{}
+  };
+}
+
 const CACHE_KEY = 'xuqu-schedule-cache';
 const SYNC_FLAG = 'xuqu-synced';
 const DOC_PATH = 'app/xuqu';
@@ -1757,6 +1797,7 @@ async function loadData(){
   try{
     db = (window.claude && window.claude.use) ? await window.claude.use('db') : null;
   }catch(e){ db = null; }
+  if(!db && jsonbinOn()) db = {doc: jsonbinDoc};
   if(!db){
     updateSyncInfo('資料僅存於此裝置');
     return;
@@ -2387,6 +2428,34 @@ document.getElementById('defaultTermInput').addEventListener('change', e=>{
   state.defaultTerm = v > 0 ? v : FALLBACK_TERM;
   e.target.value = state.defaultTerm;
   persist();
+});
+
+/* ---------- 資料備份與轉移 ---------- */
+function importData(text){
+  let obj;
+  try{ obj = JSON.parse(text); }catch(e){ showToast('這不是有效的備份文字'); return false; }
+  if(!obj || !Array.isArray(obj.slots)){ showToast('格式不符：找不到班級時段'); return false; }
+  state.slots = []; state.staff = [{id:'p1', name:'晏存', c:0}];
+  state.marks = {}; state.notes = {}; state.extras = {}; state.students = []; state.att = {};
+  applyData(obj);
+  persist();
+  renderAll(); renderSlotList(); renderStaffList();
+  document.getElementById('defaultTermInput').value = state.defaultTerm || FALLBACK_TERM;
+  return true;
+}
+document.getElementById('backupMakeBtn').addEventListener('click', ()=>{
+  const ta = document.getElementById('backupText');
+  ta.value = JSON.stringify({...snapshotState(), updatedAt: new Date().toISOString()}, null, 1);
+  ta.focus(); ta.select();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(()=> showToast('已複製備份文字，請貼到另一個裝置'), ()=> showToast('請長按文字框全選後複製'));
+  }else showToast('請長按文字框全選後複製');
+});
+document.getElementById('backupImportBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('backupText').value.trim();
+  if(!text){ showToast('請先貼上備份文字'); return; }
+  if(!confirm('匯入會取代目前所有資料，確定要匯入嗎？')) return;
+  if(importData(text)) showToast('已匯入，資料會同步到雲端');
 });
 
 /* ---------- 值班人員 ---------- */
