@@ -1,0 +1,185 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>班表雲端資料匯入</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body style="font-family:sans-serif;max-width:600px;margin:30px auto;padding:20px;line-height:1.8;">
+  <h2>班表雲端資料匯入</h2>
+  <p>請登入 Supabase 帳號，再選擇電腦備份檔。</p>
+
+  <label>Supabase Project URL</label><br>
+  <input id="projectUrl" style="width:100%;padding:10px;box-sizing:border-box"
+    value="https://tdqkbqzqefpoflwwardz.supabase.co"><br><br>
+
+  <label>Supabase Publishable Key</label><br>
+  <input id="apiKey" type="password" autocomplete="off"
+    placeholder="貼上你的 Publishable Key"
+    style="width:100%;padding:10px;box-sizing:border-box"><br><br>
+
+  <hr>
+
+  <label>登入 Email</label><br>
+  <input id="email" type="email" autocomplete="username"
+    style="width:100%;padding:10px;box-sizing:border-box"><br><br>
+
+  <label>登入密碼</label><br>
+  <input id="password" type="password" autocomplete="current-password"
+    style="width:100%;padding:10px;box-sizing:border-box"><br><br>
+
+  <button id="login" style="padding:12px 20px;font-size:16px">
+    登入 Supabase
+  </button>
+
+  <p id="loginStatus"></p>
+
+  <hr>
+
+  <h3>選擇電腦備份檔</h3>
+  <input id="file" type="file" accept=".json,application/json">
+  <p id="preview"></p>
+
+  <button id="import" disabled style="padding:12px 20px;font-size:16px">
+    確認匯入雲端
+  </button>
+
+  <p id="status"></p>
+
+  <script>
+    let client = null;
+    let backupData = null;
+    let signedIn = false;
+
+    const $ = id => document.getElementById(id);
+
+    $('login').onclick = async () => {
+      try {
+        const url = $('projectUrl').value.trim();
+        const key = $('apiKey').value.trim();
+        const email = $('email').value.trim();
+        const password = $('password').value;
+
+        if (!url || !key || !email || !password) {
+          $('loginStatus').textContent = '請完整填寫登入資料。';
+          return;
+        }
+
+        client = window.supabase.createClient(url, key);
+
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) throw error;
+
+        signedIn = !!data.session;
+        $('loginStatus').textContent = signedIn
+          ? '登入成功，可以選擇備份檔。'
+          : '登入尚未完成，請重新確認。';
+
+        checkReady();
+      } catch (e) {
+        signedIn = false;
+        $('loginStatus').textContent = '登入失敗：' + e.message;
+        checkReady();
+      }
+    };
+
+    $('file').onchange = async event => {
+      backupData = null;
+      $('preview').textContent = '';
+      checkReady();
+
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+
+        const required = [
+          'slots', 'staff', 'marks', 'notes',
+          'extras', 'students', 'att'
+        ];
+
+        const missing = required.filter(
+          key => !Object.prototype.hasOwnProperty.call(parsed, key)
+        );
+
+        if (missing.length) {
+          throw new Error('備份檔缺少必要資料欄位：' + missing.join(', '));
+        }
+
+        if (!Array.isArray(parsed.slots) || !Array.isArray(parsed.staff)) {
+          throw new Error('備份檔格式不符合預期。');
+        }
+
+        backupData = parsed;
+
+        $('preview').textContent =
+          '檔案檢查成功！\n' +
+          '班表時段：' + parsed.slots.length + '\n' +
+          '人員數量：' + parsed.staff.length + '\n' +
+          '檔案大小：約 ' + (file.size / 1024).toFixed(1) + ' KB\n' +
+          '請確認這是電腦上的完整備份。';
+
+        checkReady();
+      } catch (e) {
+        $('preview').textContent = '檔案讀取失敗：' + e.message;
+      }
+    };
+
+    function checkReady() {
+      $('import').disabled = !(signedIn && backupData);
+    }
+
+    $('import').onclick = async () => {
+      if (!signedIn || !backupData || !client) return;
+
+      const confirmed = confirm(
+        '即將把電腦備份寫入 Supabase 的 app_state。\n' +
+        '這會取代雲端目前 id=main 的資料。\n\n' +
+        '請確認電腦備份完整，並確定要繼續。'
+      );
+
+      if (!confirmed) return;
+
+      $('import').disabled = true;
+      $('status').textContent = '正在匯入，請稍候……';
+
+      try {
+        const { data: userData, error: userError } =
+          await client.auth.getUser();
+
+        if (userError || !userData.user) {
+          throw new Error('登入狀態已失效，請重新登入。');
+        }
+
+        const { error } = await client
+          .from('app_state')
+          .upsert({
+            id: 'main',
+            data: backupData,
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+
+        $('status').textContent =
+          '匯入成功！電腦班表資料已寫入 Supabase。';
+
+      } catch (e) {
+        $('status').textContent =
+          '匯入失敗：' + e.message +
+          '\n請先不要關閉頁面，並把錯誤訊息告訴我。';
+      } finally {
+        checkReady();
+      }
+    };
+  </script>
+</body>
+</html>
